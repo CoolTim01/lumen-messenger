@@ -2,11 +2,11 @@ const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const server = http.createServer(app);
 
-// Настройка Socket.IO для работы на Render
 const io = socketIo(server, {
     cors: {
         origin: "*",
@@ -19,15 +19,36 @@ const io = socketIo(server, {
 const users = new Map();
 const onlineUsers = new Set();
 
-// Раздача статических файлов
+// Файл для хранения сообщений
+const MESSAGES_FILE = path.join(__dirname, 'messages.json');
+
+// Загрузка сообщений из файла
+let messagesDB = {};
+if (fs.existsSync(MESSAGES_FILE)) {
+    try {
+        messagesDB = JSON.parse(fs.readFileSync(MESSAGES_FILE, 'utf8'));
+        console.log('📁 История сообщений загружена');
+    } catch (e) {
+        console.log('📁 Создана новая база сообщений');
+    }
+}
+
+// Функция сохранения сообщений
+function saveMessages() {
+    fs.writeFileSync(MESSAGES_FILE, JSON.stringify(messagesDB, null, 2));
+}
+
+// Функция получения ключа чата
+function getChatKey(user1, user2) {
+    return [user1, user2].sort().join('-');
+}
+
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Главная страница
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Проверка здоровья (нужно для Render)
 app.get('/health', (req, res) => {
     res.json({ 
         status: 'ok', 
@@ -39,7 +60,6 @@ app.get('/health', (req, res) => {
 io.on('connection', (socket) => {
     console.log(`✅ Пользователь подключился: ${socket.id}`);
 
-    // Отправляем подтверждение подключения
     socket.emit('connected', { socketId: socket.id });
 
     // Регистрация пользователя
@@ -61,7 +81,6 @@ io.on('connection', (socket) => {
         
         console.log(`🟢 ${userInfo.name} вошел в сеть`);
         
-        // Отправляем список пользователей
         const usersList = [];
         users.forEach((user, id) => {
             if (id !== socket.id) {
@@ -74,8 +93,15 @@ io.on('connection', (socket) => {
             usersList: usersList
         });
         
-        // Оповещаем других
         socket.broadcast.emit('userOnline', userInfo);
+    });
+
+    // Запрос истории сообщений
+    socket.on('getHistory', (data) => {
+        if (!data.with) return;
+        const chatKey = getChatKey(socket.id, data.with);
+        const history = messagesDB[chatKey] || [];
+        socket.emit('messageHistory', history);
     });
 
     // Отправка сообщения
@@ -97,22 +123,27 @@ io.on('connection', (socket) => {
             })
         };
 
+        // Сохраняем сообщение в базу
+        const chatKey = getChatKey(socket.id, data.to);
+        if (!messagesDB[chatKey]) {
+            messagesDB[chatKey] = [];
+        }
+        messagesDB[chatKey].push(messageData);
+        saveMessages();
+        
+        console.log(`💬 ${sender.name} → сообщение сохранено`);
+
         if (onlineUsers.has(data.to)) {
             io.to(data.to).emit('privateMessage', messageData);
-            socket.emit('messageSent', messageData);
-            console.log(`💬 ${sender.name} → сообщение`);
-        } else {
-            socket.emit('error', { message: 'Пользователь не в сети' });
         }
+        socket.emit('messageSent', messageData);
     });
 
     // WebRTC сигналинг
     socket.on('callUser', (data) => {
         const caller = users.get(socket.id);
         if (!caller || !data.userToCall) return;
-
         console.log(`📞 ${caller.name} вызывает абонента`);
-        
         io.to(data.userToCall).emit('incomingCall', {
             from: socket.id,
             fromName: caller.name,
@@ -153,11 +184,11 @@ io.on('connection', (socket) => {
     });
 });
 
-// Запуск сервера (Render сам установит PORT)
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
     console.log('================================');
     console.log('🚀 LUMEN MESSENGER ЗАПУЩЕН');
     console.log(`📡 Порт: ${PORT}`);
+    console.log('💾 Сообщения сохраняются в файл');
     console.log('================================');
 });
