@@ -951,10 +951,20 @@
                 };
                 
                 peerConnection.ontrack = (event) => {
-                    const audio = new Audio();
-                    audio.srcObject = event.streams[0];
-                    audio.play().catch(e => console.log('Аудио ошибка:', e));
-                };
+					const audio = new Audio();
+					audio.srcObject = event.streams[0];
+					audio.id = 'remoteAudio'; // Добавляем ID для управления
+					const volume = document.getElementById('volumeSlider').value / 100;
+					audio.volume = volume; // Устанавливаем начальную громкость
+					audio.play().catch(e => console.log('Аудио ошибка:', e));
+					
+					// Удаляем старые аудио если есть
+					const oldAudio = document.getElementById('remoteAudio');
+					if (oldAudio) {
+						oldAudio.remove();
+					}
+					document.body.appendChild(audio);
+				};
                 
                 peerConnection.oniceconnectionstatechange = () => {
                     if (peerConnection.iceConnectionState === 'disconnected' ||
@@ -1079,6 +1089,11 @@
                 localStream.getTracks().forEach(track => track.stop());
                 localStream = null;
             }
+			
+			const remoteAudio = document.getElementById('remoteAudio');
+			if (remoteAudio) {
+				remoteAudio.remove();
+			}
             
             callSeconds = 0;
             document.getElementById('callTime').textContent = '00:00';
@@ -1102,17 +1117,26 @@
         }
 
         function updateVolume() {
-            const volume = document.getElementById('volumeSlider').value;
-            document.getElementById('volumeValue').textContent = volume + '%';
-            
-            if (localStream) {
-                const audioTracks = localStream.getAudioTracks();
-                audioTracks.forEach(track => {
-                    // Применяем громкость через gain (усиление)
-                    track.enabled = volume > 0;
-                });
-            }
-        }
+			const volume = document.getElementById('volumeSlider').value;
+			document.getElementById('volumeValue').textContent = volume + '%';
+			
+			// Регулировка громкости входящего звука
+			const volumeLevel = volume / 100;
+			
+			// Находим все аудио элементы и меняем громкость
+			const audioElements = document.getElementsByTagName('audio');
+			for (let audio of audioElements) {
+				audio.volume = volumeLevel;
+			}
+			
+			// Также регулируем громкость локального потока
+			if (localStream) {
+				const audioTracks = localStream.getAudioTracks();
+				audioTracks.forEach(track => {
+					track.enabled = volume > 0;
+				});
+			}
+		}
 
         // Обработка закрытия вкладки
         window.addEventListener('beforeunload', () => {
