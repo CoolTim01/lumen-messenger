@@ -330,7 +330,7 @@
                 if (history && history.length > 0) {
                     document.getElementById('messages').innerHTML = '';
                     history.forEach(msg => {
-                        addMessageToChat(msg.text, msg.from === socket.id, msg.time);
+                        addMessageToChat(msg.text, msg.fromCode === currentUser.code, msg.time);
                     });
                 }
             });
@@ -448,7 +448,7 @@
 			// Загружаем из локальной истории если есть
 			if (messageHistory[user.id]) {
 				messageHistory[user.id].forEach(msg => {
-					addMessageToChat(msg.text, msg.from === socket.id, msg.time);
+					addMessageToChat(msg.text, msg.fromCode === currentUser.code, msg.time);
 				});
 			}
 			
