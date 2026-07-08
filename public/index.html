@@ -315,7 +315,7 @@
 
             socket.on('privateMessage', (message) => {
 				playSound('message');
-				const sentByMe = (message.fromCode === currentUser.code);
+				const sentByMe = (msg.fromCode === currentUser.code || msg.from === socket.id);
 				addMessageToChat(message.text, sentByMe, message.time);
 				if (!messageHistory[message.fromCode]) messageHistory[message.fromCode] = [];
 				messageHistory[message.fromCode].push(message);
@@ -329,7 +329,7 @@
 				if (history && history.length > 0) {
 					document.getElementById('messages').innerHTML = '';
 					history.forEach(msg => {
-						const sentByMe = (msg.fromCode === currentUser.code);
+						const sentByMe = (msg.fromCode === currentUser.code || msg.from === socket.id);
 						addMessageToChat(msg.text, sentByMe, msg.time);
 					});
 				}
