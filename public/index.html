@@ -289,8 +289,25 @@
             socket.on('connect', () => console.log('✅ Подключено'));
 
             socket.on('registrationComplete', (data) => {
-                updateContactsList(data.usersList);
-            });
+				updateContactsList(data.usersList);
+				// Загружаем все чаты пользователя
+				socket.emit('getAllChats', { code: currentUser.code });
+			});
+			
+			// Получение всех чатов при входе
+			socket.on('allChats', (chats) => {
+				// Загружаем все чаты в messageHistory
+				Object.values(chats).forEach(chat => {
+					const contactId = null;
+					// Ищем ID контакта по коду
+					users.forEach((u, id) => {
+						if (u.code === chat.with) {
+							if (!messageHistory[id]) messageHistory[id] = [];
+							messageHistory[id] = chat.messages;
+						}
+					});
+				});
+			});
 
             socket.on('userOnline', (user) => addContact(user));
 
@@ -412,19 +429,34 @@
         }
 
         function selectContact(user) {
-            selectedContact = user.id;
-            document.querySelectorAll('.contact-item').forEach(item => item.classList.remove('selected'));
-            const contactEl = document.getElementById(`contact-${user.id}`);
-            if (contactEl) contactEl.classList.add('selected');
-            document.getElementById('chatTitle').textContent = `Чат с ${user.name}`;
-            document.getElementById('chatStatus').textContent = '🟢 В сети';
-            document.getElementById('callButton').disabled = false;
-            document.getElementById('messageInput').disabled = false;
-            document.getElementById('sendButton').disabled = false;
-            document.getElementById('messageInput').focus();
-            document.getElementById('messages').innerHTML = '';
-            if (socket && socket.connected) socket.emit('getHistory', { with: user.id });
-        }
+			selectedContact = user.id;
+			
+			document.querySelectorAll('.contact-item').forEach(item => item.classList.remove('selected'));
+			const contactEl = document.getElementById(`contact-${user.id}`);
+			if (contactEl) contactEl.classList.add('selected');
+			
+			document.getElementById('chatTitle').textContent = `Чат с ${user.name}`;
+			document.getElementById('chatStatus').textContent = '🟢 В сети';
+			document.getElementById('callButton').disabled = false;
+			document.getElementById('messageInput').disabled = false;
+			document.getElementById('sendButton').disabled = false;
+			document.getElementById('messageInput').focus();
+			
+			// Очищаем и загружаем историю
+			document.getElementById('messages').innerHTML = '';
+			
+			// Загружаем из локальной истории если есть
+			if (messageHistory[user.id]) {
+				messageHistory[user.id].forEach(msg => {
+					addMessageToChat(msg.text, msg.from === socket.id, msg.time);
+				});
+			}
+			
+			// Запрашиваем с сервера свежую историю
+			if (socket && socket.connected) {
+				socket.emit('getHistory', { with: user.code || user.id });
+			}
+		}
 
         function clearChat() {
             selectedContact = null;

@@ -8,39 +8,35 @@ const app = express();
 const server = http.createServer(app);
 
 const io = socketIo(server, {
-    cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
-    },
+    cors: { origin: "*", methods: ["GET", "POST"] },
     transports: ['websocket', 'polling']
 });
 
-// Хранение пользователей
 const users = new Map();
 const onlineUsers = new Set();
 
 // Файл для хранения сообщений
 const MESSAGES_FILE = path.join(__dirname, 'messages.json');
 
-// Загрузка сообщений из файла
+// Загрузка сообщений
 let messagesDB = {};
 if (fs.existsSync(MESSAGES_FILE)) {
     try {
         messagesDB = JSON.parse(fs.readFileSync(MESSAGES_FILE, 'utf8'));
-        console.log('📁 История сообщений загружена');
-    } catch (e) {
-        console.log('📁 Создана новая база сообщений');
+        console.log('📁 История загружена');
+    } catch(e) {
+        console.log('📁 Новая база сообщений');
     }
 }
 
-// Функция сохранения сообщений
+// Сохранение в файл
 function saveMessages() {
     fs.writeFileSync(MESSAGES_FILE, JSON.stringify(messagesDB, null, 2));
 }
 
-// Функция получения ключа чата
-function getChatKey(user1, user2) {
-    return [user1, user2].sort().join('-');
+// Ключ чата: сортированные коды пользователей
+function getChatKey(code1, code2) {
+    return [code1, code2].sort().join('-');
 }
 
 app.use(express.static(path.join(__dirname, 'public')));
@@ -50,24 +46,16 @@ app.get('/', (req, res) => {
 });
 
 app.get('/health', (req, res) => {
-    res.json({ 
-        status: 'ok', 
-        users: users.size,
-        online: onlineUsers.size
-    });
+    res.json({ status: 'ok', users: users.size, messages: Object.keys(messagesDB).length });
 });
 
 io.on('connection', (socket) => {
-    console.log(`✅ Пользователь подключился: ${socket.id}`);
-
+    console.log(`✅ Подключился: ${socket.id}`);
     socket.emit('connected', { socketId: socket.id });
 
-    // Регистрация пользователя
+    // Регистрация
     socket.on('register', (userData) => {
-        if (!userData || !userData.name || !userData.code) {
-            socket.emit('error', { message: 'Неверные данные' });
-            return;
-        }
+        if (!userData || !userData.name || !userData.code) return;
 
         const userInfo = {
             id: socket.id,
@@ -78,28 +66,50 @@ io.on('connection', (socket) => {
         
         users.set(socket.id, userInfo);
         onlineUsers.add(socket.id);
+        console.log(`🟢 ${userInfo.name} (${userInfo.code}) вошел`);
         
-        console.log(`🟢 ${userInfo.name} вошел в сеть`);
-        
+        // Список других пользователей
         const usersList = [];
         users.forEach((user, id) => {
-            if (id !== socket.id) {
-                usersList.push(user);
-            }
+            if (id !== socket.id) usersList.push(user);
         });
         
-        socket.emit('registrationComplete', {
-            user: userInfo,
-            usersList: usersList
-        });
-        
+        socket.emit('registrationComplete', { user: userInfo, usersList });
         socket.broadcast.emit('userOnline', userInfo);
     });
 
-    // Запрос истории сообщений
+    // Запрос ВСЕХ чатов пользователя
+    socket.on('getAllChats', (data) => {
+        const userCode = data.code;
+        const chats = {};
+        
+        // Ищем все чаты где есть этот пользователь
+        Object.keys(messagesDB).forEach(key => {
+            const codes = key.split('-');
+            if (codes.includes(userCode)) {
+                const otherCode = codes.find(c => c !== userCode);
+                // Находим имя собеседника
+                let otherName = otherCode;
+                users.forEach(u => {
+                    if (u.code === otherCode) otherName = u.name;
+                });
+                chats[key] = {
+                    with: otherCode,
+                    withName: otherName,
+                    messages: messagesDB[key]
+                };
+            }
+        });
+        
+        socket.emit('allChats', chats);
+    });
+
+    // Запрос истории с конкретным пользователем
     socket.on('getHistory', (data) => {
         if (!data.with) return;
-        const chatKey = getChatKey(socket.id, data.with);
+        const user = users.get(socket.id);
+        if (!user) return;
+        const chatKey = getChatKey(user.code, data.with);
         const history = messagesDB[chatKey] || [];
         socket.emit('messageHistory', history);
     });
@@ -107,43 +117,45 @@ io.on('connection', (socket) => {
     // Отправка сообщения
     socket.on('privateMessage', (data) => {
         if (!data.to || !data.text) return;
-
         const sender = users.get(socket.id);
         if (!sender) return;
 
+        // Находим получателя по ID
+        let receiverCode = null;
+        users.forEach((u, id) => {
+            if (id === data.to) receiverCode = u.code;
+        });
+        if (!receiverCode) return;
+
+        const chatKey = getChatKey(sender.code, receiverCode);
+        
         const messageData = {
             id: Date.now().toString(),
             from: socket.id,
             fromName: sender.name,
             fromCode: sender.code,
             text: data.text,
-            time: new Date().toLocaleTimeString('ru-RU', { 
-                hour: '2-digit', 
-                minute: '2-digit' 
-            })
+            time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
         };
 
-        // Сохраняем сообщение в базу
-        const chatKey = getChatKey(socket.id, data.to);
-        if (!messagesDB[chatKey]) {
-            messagesDB[chatKey] = [];
-        }
+        // Сохраняем
+        if (!messagesDB[chatKey]) messagesDB[chatKey] = [];
         messagesDB[chatKey].push(messageData);
         saveMessages();
         
-        console.log(`💬 ${sender.name} → сообщение сохранено`);
+        console.log(`💬 ${sender.name} → ${receiverCode}: ${data.text.substring(0, 20)}`);
 
+        // Отправляем получателю и отправителю
         if (onlineUsers.has(data.to)) {
             io.to(data.to).emit('privateMessage', messageData);
         }
         socket.emit('messageSent', messageData);
     });
 
-    // WebRTC сигналинг
+    // Звонки
     socket.on('callUser', (data) => {
         const caller = users.get(socket.id);
-        if (!caller || !data.userToCall) return;
-        console.log(`📞 ${caller.name} вызывает абонента`);
+        if (!caller) return;
         io.to(data.userToCall).emit('incomingCall', {
             from: socket.id,
             fromName: caller.name,
@@ -158,10 +170,7 @@ io.on('connection', (socket) => {
 
     socket.on('rejectCall', (data) => {
         if (!data.to) return;
-        io.to(data.to).emit('callRejected', {
-            from: socket.id,
-            message: 'Звонок отклонен'
-        });
+        io.to(data.to).emit('callRejected');
     });
 
     socket.on('endCall', (data) => {
@@ -173,22 +182,16 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         const user = users.get(socket.id);
         if (user) {
-            console.log(`🔴 ${user.name} вышел из сети`);
+            console.log(`🔴 ${user.name} вышел`);
             users.delete(socket.id);
             onlineUsers.delete(socket.id);
-            io.emit('userOffline', { 
-                id: socket.id,
-                name: user.name 
-            });
+            io.emit('userOffline', { id: socket.id, name: user.name });
         }
     });
 });
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
-    console.log('================================');
-    console.log('🚀 LUMEN MESSENGER ЗАПУЩЕН');
-    console.log(`📡 Порт: ${PORT}`);
-    console.log('💾 Сообщения сохраняются в файл');
-    console.log('================================');
+    console.log('🚀 LUMEN ЗАПУЩЕН, порт:', PORT);
+    console.log('💾 Файл сообщений:', MESSAGES_FILE);
 });
