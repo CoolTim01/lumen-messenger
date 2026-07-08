@@ -248,7 +248,7 @@
             gain.connect(ctx.destination);
             osc.frequency.value = frequency;
             osc.type = type;
-            gain.gain.value = 0.3;
+            gain.gain.value = 0.06;
             osc.start();
             gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
             osc.stop(ctx.currentTime + duration);
@@ -580,21 +580,27 @@
         }
 
         function updateVolume() {
-            const volume = document.getElementById('volumeSlider').value;
-            const boostedVolume = Math.min(volume * 15, 100) / 100;
-            document.getElementById('volumeValue').textContent = volume + '%';
-            
-            const audioElements = document.querySelectorAll('audio');
-            audioElements.forEach(audio => {
-                audio.volume = boostedVolume;
-            });
-            
-            if (localStream) {
-                localStream.getAudioTracks().forEach(track => {
-                    track.enabled = volume > 0;
-                });
-            }
-        }
+			const volume = document.getElementById('volumeSlider').value;
+			// Умножаем на 20 для громкости собеседника
+			const boostedVolume = Math.min(volume * 20, 100) / 100;
+			document.getElementById('volumeValue').textContent = volume + '%';
+			
+			// Меняем громкость только собеседника (аудио звонка)
+			const audioElements = document.querySelectorAll('audio');
+			audioElements.forEach(audio => {
+				// Только для аудио звонка (id='remoteAudio'), не для звуков уведомлений
+				if (audio.id === 'remoteAudio') {
+					audio.volume = boostedVolume;
+				}
+			});
+			
+			// Отключаем микрофон при 0
+			if (localStream) {
+				localStream.getAudioTracks().forEach(track => {
+					track.enabled = volume > 0;
+				});
+			}
+		}
     </script>
 </body>
 </html>
