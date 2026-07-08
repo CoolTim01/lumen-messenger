@@ -248,9 +248,9 @@
             gain.connect(ctx.destination);
             osc.frequency.value = frequency;
             osc.type = type;
-            gain.gain.value = 0.06;
+            gain.gain.value = 0.02;
             osc.start();
-            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
             osc.stop(ctx.currentTime + duration);
         }
 
@@ -580,24 +580,39 @@
         }
 
         function updateVolume() {
-			const volume = document.getElementById('volumeSlider').value;
-			// Умножаем на 20 для громкости собеседника
-			const boostedVolume = Math.min(volume * 20, 100) / 100;
-			document.getElementById('volumeValue').textContent = volume + '%';
+			const sliderValue = parseInt(document.getElementById('volumeSlider').value);
+			document.getElementById('volumeValue').textContent = sliderValue + '%';
 			
-			// Меняем громкость только собеседника (аудио звонка)
+			// Экспоненциальная шкала:
+			// 1% -> 0.01, 50% -> 1.0, 100% -> 3.0
+			let boostedVolume;
+			if (sliderValue === 0) {
+				boostedVolume = 0;
+			} else if (sliderValue <= 50) {
+				// От 1 до 50: линейно от 0.01 до 1.0
+				boostedVolume = 0.01 + (sliderValue - 1) * (0.99 / 49);
+			} else {
+				// От 51 до 100: линейно от 1.0 до 3.0
+				boostedVolume = 1.0 + (sliderValue - 50) * (2.0 / 50);
+			}
+			
+			// Округляем до 2 знаков
+			boostedVolume = Math.round(boostedVolume * 100) / 100;
+			
+			console.log('Ползунок:', sliderValue + '%', '→ Громкость:', boostedVolume);
+			
+			// Применяем громкость к аудио звонка
 			const audioElements = document.querySelectorAll('audio');
 			audioElements.forEach(audio => {
-				// Только для аудио звонка (id='remoteAudio'), не для звуков уведомлений
 				if (audio.id === 'remoteAudio') {
-					audio.volume = boostedVolume;
+					audio.volume = Math.min(boostedVolume, 3.0);
 				}
 			});
 			
 			// Отключаем микрофон при 0
 			if (localStream) {
 				localStream.getAudioTracks().forEach(track => {
-					track.enabled = volume > 0;
+					track.enabled = sliderValue > 0;
 				});
 			}
 		}
