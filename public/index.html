@@ -314,26 +314,26 @@
             socket.on('userOffline', (data) => removeContact(data.id));
 
             socket.on('privateMessage', (message) => {
-                playSound('message');
-                if (selectedContact === message.from) {
-                    addMessageToChat(message.text, false, message.time);
-                }
-                if (!messageHistory[message.from]) messageHistory[message.from] = [];
-                messageHistory[message.from].push(message);
-            });
+				playSound('message');
+				const sentByMe = (message.fromCode === currentUser.code);
+				addMessageToChat(message.text, sentByMe, message.time);
+				if (!messageHistory[message.fromCode]) messageHistory[message.fromCode] = [];
+				messageHistory[message.fromCode].push(message);
+			});
 
             socket.on('messageSent', (message) => {
                 addMessageToChat(message.text, true, message.time);
             });
 
             socket.on('messageHistory', (history) => {
-                if (history && history.length > 0) {
-                    document.getElementById('messages').innerHTML = '';
-                    history.forEach(msg => {
-                        addMessageToChat(msg.text, msg.fromCode === currentUser.code, msg.time);
-                    });
-                }
-            });
+				if (history && history.length > 0) {
+					document.getElementById('messages').innerHTML = '';
+					history.forEach(msg => {
+						const sentByMe = (msg.fromCode === currentUser.code);
+						addMessageToChat(msg.text, sentByMe, msg.time);
+					});
+				}
+			});
 
             socket.on('incomingCall', (data) => {
                 playSound('call');
