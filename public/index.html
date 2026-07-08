@@ -584,38 +584,25 @@
 			const sliderValue = parseInt(document.getElementById('volumeSlider').value);
 			document.getElementById('volumeValue').textContent = sliderValue + '%';
 			
-			// Экспоненциальная шкала:
-			// 1% -> 0.01, 50% -> 1.0, 100% -> 3.0
+			// Экспоненциальная шкала
 			let boostedVolume;
 			if (sliderValue === 0) {
 				boostedVolume = 0;
 			} else if (sliderValue <= 50) {
-				// От 1 до 50: линейно от 0.01 до 1.0
 				boostedVolume = 0.01 + (sliderValue - 1) * (0.99 / 49);
 			} else {
-				// От 51 до 100: линейно от 1.0 до 3.0
 				boostedVolume = 1.0 + (sliderValue - 50) * (2.0 / 50);
 			}
-			
-			// Округляем до 2 знаков
 			boostedVolume = Math.round(boostedVolume * 100) / 100;
 			
-			console.log('Ползунок:', sliderValue + '%', '→ Громкость:', boostedVolume);
-			
-			// Применяем громкость к аудио звонка
+			// Меняем ТОЛЬКО громкость входящего звука (собеседника)
+			// Микрофон НЕ трогаем — он всегда работает
 			const audioElements = document.querySelectorAll('audio');
 			audioElements.forEach(audio => {
 				if (audio.id === 'remoteAudio') {
 					audio.volume = Math.min(boostedVolume, 3.0);
 				}
 			});
-			
-			// Отключаем микрофон при 0
-			if (localStream) {
-				localStream.getAudioTracks().forEach(track => {
-					track.enabled = sliderValue > 0;
-				});
-			}
 		}
     </script>
 </body>
