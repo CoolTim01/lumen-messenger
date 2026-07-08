@@ -255,22 +255,23 @@
         }
 
         function playSound(type) {
-            try {
-                if (type === 'message') {
-                    createBeep(800, 0.15);
-                    setTimeout(() => createBeep(1000, 0.15), 100);
-                } else if (type === 'call') {
-                    createBeep(600, 0.3, 'square');
-                    setTimeout(() => createBeep(800, 0.3, 'square'), 400);
-                    setTimeout(() => createBeep(600, 0.3, 'square'), 800);
-                } else if (type === 'accept') {
-                    createBeep(1000, 0.2);
-                    setTimeout(() => createBeep(1200, 0.3), 150);
-                } else if (type === 'end') {
-                    createBeep(400, 0.5, 'sawtooth');
-                }
-            } catch(e) {}
-        }
+			try {
+				if (type === 'message') {
+					createBeep(800, 0.1);
+					setTimeout(() => createBeep(1000, 0.1), 80);
+				} else if (type === 'call') {
+					// Тихий звук входящего звонка
+					createBeep(500, 0.2, 'square');
+					setTimeout(() => createBeep(600, 0.2, 'square'), 500);
+					setTimeout(() => createBeep(500, 0.2, 'square'), 1000);
+				} else if (type === 'accept') {
+					createBeep(800, 0.15);
+					setTimeout(() => createBeep(1000, 0.2), 120);
+				} else if (type === 'end') {
+					createBeep(300, 0.4, 'sawtooth');
+				}
+			} catch(e) {}
+		}
 
         let socket;
         let currentUser;
