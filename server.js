@@ -80,29 +80,40 @@ io.on('connection', (socket) => {
 
     // Запрос ВСЕХ чатов пользователя
     socket.on('getAllChats', (data) => {
-        const userCode = data.code;
-        const chats = {};
-        
-        // Ищем все чаты где есть этот пользователь
-        Object.keys(messagesDB).forEach(key => {
-            const codes = key.split('-');
-            if (codes.includes(userCode)) {
-                const otherCode = codes.find(c => c !== userCode);
-                // Находим имя собеседника
-                let otherName = otherCode;
-                users.forEach(u => {
-                    if (u.code === otherCode) otherName = u.name;
-                });
-                chats[key] = {
-                    with: otherCode,
-                    withName: otherName,
-                    messages: messagesDB[key]
-                };
-            }
-        });
-        
-        socket.emit('allChats', chats);
-    });
+		const userCode = data.code;
+		const allChats = {};
+		
+		// Проходим по ВСЕМ чатам в базе
+		Object.keys(messagesDB).forEach(key => {
+			const codes = key.split('-');
+			if (codes.includes(userCode)) {
+				const otherCode = codes.find(c => c !== userCode);
+				
+				// Ищем пользователя среди всех зарегистрированных
+				let otherName = otherCode;
+				let otherAvatar = otherCode.charAt(0).toUpperCase();
+				let isOnline = false;
+				
+				users.forEach(u => {
+					if (u.code === otherCode) {
+						otherName = u.name;
+						otherAvatar = u.avatar;
+						isOnline = onlineUsers.has(u.id);
+					}
+				});
+				
+				allChats[otherCode] = {
+					code: otherCode,
+					name: otherName,
+					avatar: otherAvatar,
+					online: isOnline,
+					messages: messagesDB[key]
+				};
+			}
+		});
+		
+		socket.emit('allChats', allChats);
+	});
 
     // Запрос истории с конкретным пользователем
     socket.on('getHistory', (data) => {
