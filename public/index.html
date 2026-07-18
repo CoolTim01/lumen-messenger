@@ -491,7 +491,8 @@
 			const input = document.getElementById('messageInput');
 			const text = input.value.trim();
 			if (text) {
-				socket.emit('privateMessage', { to: selectedContact, text });
+				// Отправляем по коду, сервер сам найдет получателя
+				socket.emit('privateMessage', { toCode: selectedContact, text });
 				input.value = '';
 				input.focus();
 			}

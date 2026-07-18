@@ -127,52 +127,61 @@ io.on('connection', (socket) => {
 
     // Отправка сообщения
     socket.on('privateMessage', (data) => {
-        if (!data.to || !data.text) return;
-        const sender = users.get(socket.id);
-        if (!sender) return;
+		if ((!data.to && !data.toCode) || !data.text) return;
+		const sender = users.get(socket.id);
+		if (!sender) return;
 
-        // Находим получателя по ID
-        let receiverCode = null;
-        users.forEach((u, id) => {
-            if (id === data.to) receiverCode = u.code;
-        });
-        if (!receiverCode) return;
+		// Находим получателя
+		let receiverId = null;
+		let receiverCode = null;
+		
+		if (data.toCode) {
+			// Ищем по коду
+			users.forEach((u, id) => {
+				if (u.code === data.toCode) {
+					receiverId = id;
+					receiverCode = u.code;
+				}
+			});
+		} else {
+			// Ищем по ID
+			receiverId = data.to;
+			const receiver = users.get(data.to);
+			if (receiver) receiverCode = receiver.code;
+		}
+		
+		if (!receiverCode) {
+			socket.emit('error', { message: 'Пользователь не найден' });
+			return;
+		}
 
-        const chatKey = getChatKey(sender.code, receiverCode);
-        
-        const messageData = {
-            id: Date.now().toString(),
-            from: socket.id,
-            fromName: sender.name,
-            fromCode: sender.code,
-            text: data.text,
-            time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
-        };
-
-        // Сохраняем
-        if (!messagesDB[chatKey]) messagesDB[chatKey] = [];
-        messagesDB[chatKey].push(messageData);
-        saveMessages();
-        
-        console.log(`💬 ${sender.name} → ${receiverCode}: ${data.text.substring(0, 20)}`);
-
-        // Отправляем получателю и отправителю
-        if (onlineUsers.has(data.to)) {
-            io.to(data.to).emit('privateMessage', messageData);
-        }
-        socket.emit('messageSent', messageData);
-    });
+		const chatKey = getChatKey(sender.code, receiverCode);
+		...
+		
+		// Отправляем
+		if (receiverId && onlineUsers.has(receiverId)) {
+			io.to(receiverId).emit('privateMessage', messageData);
+		}
+		socket.emit('messageSent', messageData);
+	});
 
     // Звонки
     socket.on('callUser', (data) => {
-        const caller = users.get(socket.id);
-        if (!caller) return;
-        io.to(data.userToCall).emit('incomingCall', {
-            from: socket.id,
-            fromName: caller.name,
-            signal: data.signalData
-        });
-    });
+		const caller = users.get(socket.id);
+		if (!caller || !data.userToCall) return;
+		
+		// Ищем получателя по ID или коду
+		let receiverId = data.userToCall;
+		users.forEach((u, id) => {
+			if (u.code === data.userToCall) receiverId = id;
+		});
+		
+		io.to(receiverId).emit('incomingCall', {
+			from: socket.id,
+			fromName: caller.name,
+			signal: data.signalData
+		});
+	});
 
     socket.on('acceptCall', (data) => {
         if (!data.to) return;
