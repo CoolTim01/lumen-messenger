@@ -15,10 +15,8 @@ const io = socketIo(server, {
 const users = new Map();
 const onlineUsers = new Set();
 
-// Файл для хранения сообщений
 const MESSAGES_FILE = path.join(__dirname, 'messages.json');
 
-// Загрузка сообщений
 let messagesDB = {};
 if (fs.existsSync(MESSAGES_FILE)) {
     try {
@@ -29,12 +27,10 @@ if (fs.existsSync(MESSAGES_FILE)) {
     }
 }
 
-// Сохранение в файл
 function saveMessages() {
     fs.writeFileSync(MESSAGES_FILE, JSON.stringify(messagesDB, null, 2));
 }
 
-// Ключ чата: сортированные коды пользователей
 function getChatKey(code1, code2) {
     return [code1, code2].sort().join('-');
 }
@@ -53,7 +49,6 @@ io.on('connection', (socket) => {
     console.log(`✅ Подключился: ${socket.id}`);
     socket.emit('connected', { socketId: socket.id });
 
-    // Регистрация
     socket.on('register', (userData) => {
         if (!userData || !userData.name || !userData.code) return;
 
@@ -68,7 +63,6 @@ io.on('connection', (socket) => {
         onlineUsers.add(socket.id);
         console.log(`🟢 ${userInfo.name} (${userInfo.code}) вошел`);
         
-        // Список других пользователей
         const usersList = [];
         users.forEach((user, id) => {
             if (id !== socket.id) usersList.push(user);
@@ -78,44 +72,40 @@ io.on('connection', (socket) => {
         socket.broadcast.emit('userOnline', userInfo);
     });
 
-    // Запрос ВСЕХ чатов пользователя
     socket.on('getAllChats', (data) => {
-		const userCode = data.code;
-		const allChats = {};
-		
-		// Проходим по ВСЕМ чатам в базе
-		Object.keys(messagesDB).forEach(key => {
-			const codes = key.split('-');
-			if (codes.includes(userCode)) {
-				const otherCode = codes.find(c => c !== userCode);
-				
-				// Ищем пользователя среди всех зарегистрированных
-				let otherName = otherCode;
-				let otherAvatar = otherCode.charAt(0).toUpperCase();
-				let isOnline = false;
-				
-				users.forEach(u => {
-					if (u.code === otherCode) {
-						otherName = u.name;
-						otherAvatar = u.avatar;
-						isOnline = onlineUsers.has(u.id);
-					}
-				});
-				
-				allChats[otherCode] = {
-					code: otherCode,
-					name: otherName,
-					avatar: otherAvatar,
-					online: isOnline,
-					messages: messagesDB[key]
-				};
-			}
-		});
-		
-		socket.emit('allChats', allChats);
-	});
+        const userCode = data.code;
+        const allChats = {};
+        
+        Object.keys(messagesDB).forEach(key => {
+            const codes = key.split('-');
+            if (codes.includes(userCode)) {
+                const otherCode = codes.find(c => c !== userCode);
+                
+                let otherName = otherCode;
+                let otherAvatar = otherCode.charAt(0).toUpperCase();
+                let isOnline = false;
+                
+                users.forEach(u => {
+                    if (u.code === otherCode) {
+                        otherName = u.name;
+                        otherAvatar = u.avatar;
+                        isOnline = onlineUsers.has(u.id);
+                    }
+                });
+                
+                allChats[otherCode] = {
+                    code: otherCode,
+                    name: otherName,
+                    avatar: otherAvatar,
+                    online: isOnline,
+                    messages: messagesDB[key]
+                };
+            }
+        });
+        
+        socket.emit('allChats', allChats);
+    });
 
-    // Запрос истории с конкретным пользователем
     socket.on('getHistory', (data) => {
         if (!data.with) return;
         const user = users.get(socket.id);
@@ -125,63 +115,70 @@ io.on('connection', (socket) => {
         socket.emit('messageHistory', history);
     });
 
-    // Отправка сообщения
     socket.on('privateMessage', (data) => {
-		if ((!data.to && !data.toCode) || !data.text) return;
-		const sender = users.get(socket.id);
-		if (!sender) return;
+        if ((!data.to && !data.toCode) || !data.text) return;
+        const sender = users.get(socket.id);
+        if (!sender) return;
 
-		// Находим получателя
-		let receiverId = null;
-		let receiverCode = null;
-		
-		if (data.toCode) {
-			// Ищем по коду
-			users.forEach((u, id) => {
-				if (u.code === data.toCode) {
-					receiverId = id;
-					receiverCode = u.code;
-				}
-			});
-		} else {
-			// Ищем по ID
-			receiverId = data.to;
-			const receiver = users.get(data.to);
-			if (receiver) receiverCode = receiver.code;
-		}
-		
-		if (!receiverCode) {
-			socket.emit('error', { message: 'Пользователь не найден' });
-			return;
-		}
+        let receiverId = null;
+        let receiverCode = null;
+        
+        if (data.toCode) {
+            users.forEach((u, id) => {
+                if (u.code === data.toCode) {
+                    receiverId = id;
+                    receiverCode = u.code;
+                }
+            });
+        } else {
+            receiverId = data.to;
+            const receiver = users.get(data.to);
+            if (receiver) receiverCode = receiver.code;
+        }
+        
+        if (!receiverCode) {
+            socket.emit('error', { message: 'Пользователь не найден' });
+            return;
+        }
 
-		const chatKey = getChatKey(sender.code, receiverCode);
-		...
-		
-		// Отправляем
-		if (receiverId && onlineUsers.has(receiverId)) {
-			io.to(receiverId).emit('privateMessage', messageData);
-		}
-		socket.emit('messageSent', messageData);
-	});
+        const chatKey = getChatKey(sender.code, receiverCode);
+        
+        const messageData = {
+            id: Date.now().toString(),
+            from: socket.id,
+            fromName: sender.name,
+            fromCode: sender.code,
+            text: data.text,
+            time: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })
+        };
 
-    // Звонки
+        if (!messagesDB[chatKey]) messagesDB[chatKey] = [];
+        messagesDB[chatKey].push(messageData);
+        saveMessages();
+        
+        console.log(`💬 ${sender.name} → ${receiverCode}: ${data.text.substring(0, 20)}`);
+
+        if (receiverId && onlineUsers.has(receiverId)) {
+            io.to(receiverId).emit('privateMessage', messageData);
+        }
+        socket.emit('messageSent', messageData);
+    });
+
     socket.on('callUser', (data) => {
-		const caller = users.get(socket.id);
-		if (!caller || !data.userToCall) return;
-		
-		// Ищем получателя по ID или коду
-		let receiverId = data.userToCall;
-		users.forEach((u, id) => {
-			if (u.code === data.userToCall) receiverId = id;
-		});
-		
-		io.to(receiverId).emit('incomingCall', {
-			from: socket.id,
-			fromName: caller.name,
-			signal: data.signalData
-		});
-	});
+        const caller = users.get(socket.id);
+        if (!caller || !data.userToCall) return;
+        
+        let receiverId = data.userToCall;
+        users.forEach((u, id) => {
+            if (u.code === data.userToCall) receiverId = id;
+        });
+        
+        io.to(receiverId).emit('incomingCall', {
+            from: socket.id,
+            fromName: caller.name,
+            signal: data.signalData
+        });
+    });
 
     socket.on('acceptCall', (data) => {
         if (!data.to) return;
@@ -198,7 +195,6 @@ io.on('connection', (socket) => {
         io.to(data.to).emit('callEnded');
     });
 
-    // Отключение
     socket.on('disconnect', () => {
         const user = users.get(socket.id);
         if (user) {
